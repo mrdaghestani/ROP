@@ -10,22 +10,50 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ROP.WebApi
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+        public Startup(IConfiguration configuration, IWebHostEnvironment env)
         {
             Configuration = configuration;
+            Environment = env;
         }
 
         public IConfiguration Configuration { get; }
+        public IWebHostEnvironment Environment { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            //registering services
+            services.AddScoped<ROP.Services.IOtpService, ROP.Services.Implementations.OtpService>();
+
+            //registering repositories
+            services.AddScoped<ROP.Services.Repositories.IUserRepository, ROP.Mongo.UserRepository>();
+
+
+            //register settings
+            services.Configure<ROP.Mongo.MongoDatabaseSettings>(Configuration.GetSection(nameof(ROP.Mongo.MongoDatabaseSettings)));
+            services.AddSingleton<ROP.Mongo.IMongoDatabaseSettings>(sp => sp.GetRequiredService<IOptions<ROP.Mongo.MongoDatabaseSettings>>().Value);
+
+            RegisterACLs(services);
+
             services.AddControllers();
+        }
+
+        private void RegisterACLs(IServiceCollection services)
+        {
+            if (Environment.IsDevelopment())
+            {
+                services.AddScoped<ROP.Services.ACL.ISmsService, ROP.Kavenegar.SmsService>();
+            }
+            else
+            {
+                services.AddScoped<ROP.Services.ACL.ISmsService, ROP.Kavenegar.SmsService>();
+            }
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
