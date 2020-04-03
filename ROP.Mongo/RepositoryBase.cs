@@ -5,26 +5,44 @@ using System.Linq;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Conventions;
 
 namespace ROP.Mongo
 {
-    public abstract class RepositoryBase<TModel, TKey> : ROP.Services.Repositories.IRepository<TModel, TKey>
-        where TModel : Models.IModel<TKey>
+    public abstract class RepositoryBase
     {
         private static readonly string _sequenceCollectionName = "counters";
-        protected IMongoDatabaseSettings Settings { get; private set; }
+        static RepositoryBase()
+        {
+            var pack = new ConventionPack();
+            pack.Add(new CamelCaseElementNameConvention());
+
+            ConventionRegistry.Register("CamelCaseConventions", pack, x => true);
+        }
         public RepositoryBase(IMongoDatabaseSettings settings)
         {
             Settings = settings;
+
             var client = new MongoClient(settings.ConnectionString);
-            var database = client.GetDatabase(settings.DatabaseName);
-            Collection = database.GetCollection<TModel>(CollectionName);
-            SequenceCollection = database.GetCollection<BsonDocument>(_sequenceCollectionName);
+            Database = client.GetDatabase(settings.DatabaseName);
+
+            SequenceCollection = Database.GetCollection<BsonDocument>(_sequenceCollectionName);
+        }
+        protected IMongoDatabaseSettings Settings { get; set; }
+        protected IMongoDatabase Database { get; set; }
+        protected IMongoCollection<BsonDocument> SequenceCollection { get; set; }
+    }
+    public abstract class RepositoryBase<TModel, TKey> : RepositoryBase, ROP.Services.Repositories.IRepository<TModel, TKey>
+        where TModel : Models.IModel<TKey>
+    {
+        public RepositoryBase(IMongoDatabaseSettings settings)
+            : base(settings)
+        {
+            Collection = Database.GetCollection<TModel>(CollectionName);
         }
 
         protected abstract string CollectionName { get; }
         protected IMongoCollection<TModel> Collection { get; set; }
-        private IMongoCollection<BsonDocument> SequenceCollection { get; set; }
 
         public async Task<List<TModel>> GetAll()
         {
